@@ -1,4 +1,4 @@
-/*!
+﻿/*!
  * © 2014 Second Street, MIT License <http://opensource.org/licenses/MIT>
  * Talker.js 1.0.1 <http://github.com/secondstreet/talker.js>
  */
@@ -128,17 +128,20 @@ var Talker = function(remoteWindow, remoteOrigin) {
     this.remoteWindow = remoteWindow;
     this.remoteOrigin = remoteOrigin;
     this.timeout = 3000;
-
+    this.rejectTimeouts = [];
     this.handshaken = false;
     this.handshake = pinkySwearPromise();
     this._id = 0;
     this._queue = [];
     this._sent = {};
-
     var _this = this;
-    window.addEventListener('message', function(messageEvent) { _this._receiveMessage(messageEvent) }, false);
+    this._listener = function (messageEvent) {
+       _this._receiveMessage(messageEvent);
+    };
+    
+    window.removeEventListener('message', this._listener);
+    window.addEventListener('message', this._listener);
     this._sendHandshake();
-
     return this;
 };
 
@@ -160,12 +163,27 @@ Talker.prototype.send = function(namespace, data, responseToId) {
     this._queue.push(message);
     this._flushQueue();
 
-    setTimeout(function() {
+    var timeout = setTimeout(function() {
         promise(false, [new Error(TALKER_ERR_TIMEOUT)]); // Reject the promise
     }, this.timeout);
 
+    this.rejectTimeouts.push(timeout);
+
     return promise;
+    };
+
+Talker.prototype.destroy = function () {
+    if (this.rejectTimeouts) {
+        for (var i = 0, l = this.rejectTimeouts.length; i < l; i++) {
+            clearTimeout(this.rejectTimeouts[i]);
+        }
+    }
+    if (this._listener) {
+        window.removeEventListener("message", this._listener);
+        this._listener = null;
+    }
 };
+
 //endregion Public Methods
 
 //region Private Methods
